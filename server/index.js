@@ -1,5 +1,6 @@
 var colyseus = require('colyseus');
 var models = require('../app/models/');
+var autoBind = require('react-autobind');
 
 class State {
     constructor() {
@@ -35,7 +36,8 @@ class Server extends colyseus.Room {
         this.req = null;
         this.db = null;
         this.models = null;
-        this.counter = 0;
+        this.counter = 1;
+        // autoBind(this);
     }
     async onInit(options) {
         this.setState(new State);
@@ -62,12 +64,13 @@ class Server extends colyseus.Room {
             this.clients.length > 0;
     }
     async onAuth(options) {
-        let ret = null, user = null;
-        ret = await this.models.user.find({ token: this.counter }, 1).allAsync();//options.key
-        if (ret != null && ret.length > 0) {
-            return ret[this.counter++];
-        }
-        return ret;
+        let ret = null;
+        let promise = new Promise((resolve, reject) => {
+            this.models.user.find({ token: this.counter++ }, 1, function (err, user) {//options.key
+                resolve(user[0])
+            });
+        });
+        return await promise;
     }
     onJoin(client, options, auth) {
         client.id = auth.id;
@@ -225,7 +228,36 @@ class Server extends colyseus.Room {
         });
     }
     findStarter() {
-        this.state.turn = 1;
+        let i, j, k = 0, max = [0, 0], found = false;;
+        for (i of this.deck) {
+            for (j of i) {
+                if (j[0] == j[1]) {
+                    found = true;
+                    if (j[0] > max[k]) {
+                        max[k] = j[0];
+                    }
+                }
+            }
+            k++;
+        }
+        if (found) {
+            this.state.turn = max[0] > max[1] ? 1 : 2;
+        }
+        else {
+            k = 0;
+            let sum = 0;
+            for (i of this.deck) {
+                for (j of i) {
+                    sum = j[0] + j[1];
+                    if (sum > max[k]) {
+                        max[k] = sum;
+                    }
+                }
+                k++;
+            }
+            this.state.turn = max[0] > max[1] ? 1 : 2;
+        }
+
     }
 
     stackHandler(client, dice) {

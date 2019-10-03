@@ -1,4 +1,3 @@
-var md5 = require('md5');
 
 module.exports = function (orm, db) {
   var User = db.define('user', {
@@ -17,8 +16,6 @@ module.exports = function (orm, db) {
     {
       hooks: {
         beforeValidation: function () {
-          if (this.password != null)
-            this.password = md5(this.password);
           this.joinedAt = new Date();
           this.lastSeen = new Date();
           this.status = true;
