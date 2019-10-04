@@ -9,7 +9,10 @@ module.exports = function (orm, db) {
     username: { type: 'text', required: true, unique: true },
     password: { type: 'text', required: true },
     token: String,
-    balance: Number,
+    balance: { type: 'integer' },
+    win: { type: 'integer' },
+    lose: { type: 'integer' },
+    totalGame: { type: 'integer' },
     joinedAt: { type: 'date', required: true, time: true },
     lastSeen: { type: 'date', required: true, time: true },
     status: Boolean
@@ -21,6 +24,9 @@ module.exports = function (orm, db) {
           this.lastSeen = new Date();
           this.status = true;
           this.balance = 0;
+          this.win = 0;
+          this.lose = 0;
+          this.totalGame = 0;
         }
 
       },
@@ -68,5 +74,5 @@ module.exports = function (orm, db) {
         }
       }
     });
-  db.sync();
+  User.sync();
 };

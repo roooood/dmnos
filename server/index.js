@@ -1,6 +1,7 @@
 var colyseus = require('colyseus');
 var models = require('../app/models/');
 var autoBind = require('react-autobind');
+var _ = require('lodash');
 
 class State {
     constructor() {
@@ -41,13 +42,17 @@ class Server extends colyseus.Room {
     async onInit(options) {
         this.setState(new State);
         let promise = new Promise((resolve, reject) => {
-            models(function (err, ldb) {
+            models((err, ldb) => {
                 resolve(ldb);
             });
         });
 
         this.db = await promise;
         this.models = this.db.models;
+
+        this.models.setting.find({ key: 'game' }, 1, (err, setting) => {
+            this.setting = JSON.parse(setting[0].value);
+        });
     }
     requestJoin(options, isNewRoom) {
         if (options.create && isNewRoom) {
@@ -65,7 +70,7 @@ class Server extends colyseus.Room {
     async onAuth(options) {
         let ret = null;
         let promise = new Promise((resolve, reject) => {
-            this.models.user.find({ token: options.key }, 1, function (err, user) {
+            this.models.user.find({ token: options.key }, 1, (err, user) => {
                 resolve(user[0])
             });
         });
@@ -185,9 +190,10 @@ class Server extends colyseus.Room {
     }
     start() {
         this.started = true;
+        this.state.started = true;
         this.setupNewGame();
     }
-    setupNewGame() {
+    setupNewGame(starter = null) {
         let dices = [], i, sit, j, simi = [];
         for (i = 0; i < 7; i++) {
             for (let j = 0; j <= i; j++) {
@@ -212,9 +218,10 @@ class Server extends colyseus.Room {
                 this.send(this.clients[sit], { dices: this.deck[i] });
             }
         }
-        this.findStarter();
+
+        this.state.turn = starter == null ? this.findStarter() : starter;
+
         let state = {
-            started: true,
             stack: [],
             moveable: [],
             simi: simi,
@@ -225,7 +232,7 @@ class Server extends colyseus.Room {
         });
     }
     findStarter() {
-        let i, j, k = 0, max = [0, 0], found = false;;
+        let i, j, k = 0, max = [0, 0], found = false, turn;
         for (i of this.deck) {
             for (j of i) {
                 if (j[0] == j[1]) {
@@ -238,7 +245,7 @@ class Server extends colyseus.Room {
             k++;
         }
         if (found) {
-            this.state.turn = max[0] > max[1] ? 1 : 2;
+            turn = max[0] > max[1] ? 1 : 2;
         }
         else {
             k = 0;
@@ -252,23 +259,23 @@ class Server extends colyseus.Room {
                 }
                 k++;
             }
-            this.state.turn = max[0] > max[1] ? 1 : 2;
+            turn = max[0] > max[1] ? 1 : 2;
         }
-
+        return turn;
     }
 
     stackHandler(client, dice) {
+        let numbers = this.clone(dice.number).sort();
         this.req = client.sit;
         let sit = client.sit - 1, i, j;
         for (i in this.deck[sit]) {
-            j = this.deck[sit][i];
-            if (dice.number.every(v => j.includes(v))) {
+            j = this.clone(this.deck[sit][i]);
+            if (_.isEqual(numbers, j.sort())) {
                 this.deck[sit].splice(i, 1);
                 this.send(client, { dices: this.deck[sit] });
                 break;
             }
         }
-
         this.state.userSimi[sit] = this.state.userSimi[sit] - 1;
         this.state.stack.push(this.clone(dice));
         let target = this.state.stack.length;
@@ -282,7 +289,6 @@ class Server extends colyseus.Room {
         else {
             this.state.moveable[0] = dice.number[1];
         }
-
         if (this.state.userSimi[sit] == 0) {
             this.RoundDone();
         }
@@ -294,14 +300,14 @@ class Server extends colyseus.Room {
     }
     next() {
         this.req = null;
-        this.next = this.state.turn == 1 ? 2 : 1;
-        this.state.turn = next;
+        this.nextPlayer = this.state.turn == 1 ? 2 : 1;
+        this.state.turn = this.nextPlayer;
         this.checkHaveDice();
     }
     checkHaveDice() {
-        let have = this.deck[this.next - 1].some(v => v.some(b => this.state.moveable.includes(b)));
+        let have = this.deck[this.nextPlayer - 1].some(v => v.some(b => this.state.moveable.includes(b)));
         if (!have) {
-            let sit = this.userBySit(this.next);
+            let sit = this.userBySit(this.nextPlayer);
             if (sit > -1) {
                 this.send(this.clients[sit], { pick: true });
             }
@@ -314,13 +320,13 @@ class Server extends colyseus.Room {
             this.deck[j].push(dice);
             this.state.simi[i] = false;
             this.dices[i] = null;
-
+            this.state.userSimi[j] = this.state.userSimi[j] + 1;
             this.send(client, { dices: this.deck[j] });
-
             if (this.checkNoMoreDice()) {
                 this.RoundDone();
             }
             else {
+                console.log(this.state.simi);
                 if (!(this.state.moveable.some(v => dice.includes(v)))) {
                     this.send(client, { pick: true });
                 }
@@ -328,9 +334,19 @@ class Server extends colyseus.Room {
         }
     }
     RoundDone() {
-        console.log('====================================');
-        console.log('RoundDone');
-        console.log('====================================');
+        let i, j, point = [0, 0], k;
+        for (i in this.deck) {
+            for (j of this.deck[i]) {
+                point[i] += j[0] + j[1];
+            }
+            k = i == 1 ? '2' : '1';
+            this.state.players[k].point = point[i];
+        }
+        let starter = point[0] > point[1] ? 1 : 2;
+        this.clock.setTimeout(() => {
+            this.setupNewGame(starter);
+        }, 500);
+
     }
     checkNoMoreDice() {
         let exist = false, i;

@@ -5,7 +5,10 @@ var connection = null;
 
 function setup(db, cb) {
   require('./user')(orm, db);
-
+  require('./points')(orm, db);
+  require('./results')(orm, db);
+  require('./setting')(orm, db);
+  // db.sync();
   return cb(null, db);
 }
 
