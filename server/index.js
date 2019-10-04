@@ -36,8 +36,7 @@ class Server extends colyseus.Room {
         this.req = null;
         this.db = null;
         this.models = null;
-        this.counter = 1;
-        // autoBind(this);
+        autoBind(this);
     }
     async onInit(options) {
         this.setState(new State);
@@ -66,7 +65,7 @@ class Server extends colyseus.Room {
     async onAuth(options) {
         let ret = null;
         let promise = new Promise((resolve, reject) => {
-            this.models.user.find({ token: this.counter++ }, 1, function (err, user) {//options.key
+            this.models.user.find({ token: options.key }, 1, function (err, user) {
                 resolve(user[0])
             });
         });
@@ -75,13 +74,15 @@ class Server extends colyseus.Room {
     onJoin(client, options, auth) {
         client.id = auth.id;
         client.name = auth.fullName();
-        // client.balance = auth.balance;
-
-        if (this.first) {
-            this.addPlayer(client, '1');
-        } else {
-            this.addPlayer(client, (this.state.players['1'] == null ? '1' : '2'));
-        }
+        client.balance = auth.balance;
+        this.timer = this.clock.setTimeout(() => {
+            if (this.first) {
+                this.addPlayer(client, '1');
+            } else {
+                this.addPlayer(client, (this.state.players['1'] == null ? '1' : '2'));
+            }
+            this.first = false;
+        }, 500)
         // this.checkJoinRules(client);
         this.send(client, {
             welcome: {
@@ -89,7 +90,7 @@ class Server extends colyseus.Room {
                 info: auth
             }
         });
-        this.first = false;
+
     }
 
     onMessage(client, message) {
@@ -147,27 +148,23 @@ class Server extends colyseus.Room {
         }
         else if ('disconnected' in this.state.players[sit] && this.state.players[sit].id == client.id) {
             client.sit = sit;
-            console.log('====================================');
-            console.log('back');
-            console.log('====================================');
             this.broadcast({
                 connected: client.name
             });
             this.send(client, { dices: this.deck[client.sit - 1] });
+            if (this.next == sit) {
+                this.checkHaveDice();
+            }
+            delete this.state.players[sit].disconnected;
             return true;
         }
         else {
-            console.log('====================================');
-            console.log(sit);
-            console.log('====================================');
+
         }
         return false;
 
     }
     disconnected(client) {
-        console.log('====================================');
-        console.log(client.name);
-        console.log('====================================');
         if (client.sit > 0)
             this.state.players[client.sit].disconnected = true;
     }
@@ -210,7 +207,7 @@ class Server extends colyseus.Room {
                     this.dices[j] = null
                 }
             }
-            sit = this.clientByplayers(i + 1);
+            sit = this.userBySit(i + 1);
             if (sit > -1) {
                 this.send(this.clients[sit], { dices: this.deck[i] });
             }
@@ -285,18 +282,26 @@ class Server extends colyseus.Room {
         else {
             this.state.moveable[0] = dice.number[1];
         }
-        this.clock.setTimeout(() => {
-            this.next();
-        }, 500);
+
+        if (this.state.userSimi[sit] == 0) {
+            this.RoundDone();
+        }
+        else {
+            this.clock.setTimeout(() => {
+                this.next();
+            }, 500);
+        }
     }
     next() {
         this.req = null;
-        let next = this.state.turn == 1 ? 2 : 1;
+        this.next = this.state.turn == 1 ? 2 : 1;
         this.state.turn = next;
-
-        let have = this.deck[next - 1].some(v => v.some(b => this.state.moveable.includes(b)));
+        this.checkHaveDice();
+    }
+    checkHaveDice() {
+        let have = this.deck[this.next - 1].some(v => v.some(b => this.state.moveable.includes(b)));
         if (!have) {
-            let sit = this.clientByplayers(next);
+            let sit = this.userBySit(this.next);
             if (sit > -1) {
                 this.send(this.clients[sit], { pick: true });
             }
@@ -311,10 +316,31 @@ class Server extends colyseus.Room {
             this.dices[i] = null;
 
             this.send(client, { dices: this.deck[j] });
-            if (!(this.state.moveable.some(v => dice.includes(v)))) {
-                this.send(client, { pick: true });
+
+            if (this.checkNoMoreDice()) {
+                this.RoundDone();
+            }
+            else {
+                if (!(this.state.moveable.some(v => dice.includes(v)))) {
+                    this.send(client, { pick: true });
+                }
             }
         }
+    }
+    RoundDone() {
+        console.log('====================================');
+        console.log('RoundDone');
+        console.log('====================================');
+    }
+    checkNoMoreDice() {
+        let exist = false, i;
+        for (i of this.state.simi) {
+            if (i !== null) {
+                exist = true;
+                break;
+            }
+        }
+        return !exist;
     }
     checkJoinRules(client) {
         var i;
@@ -328,7 +354,7 @@ class Server extends colyseus.Room {
         this.meta.ready = Object.keys(this.state.players).length;
         this.setMetadata(this.meta);
     }
-    clientByplayers(sit) {
+    userBySit(sit) {
         var ret = -1, i;
         for (i in this.clients) {
             if (this.clients[i].sit == sit) {

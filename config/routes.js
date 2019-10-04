@@ -19,6 +19,6 @@ module.exports = function (app) {
   };
   app.get('/', controllers.home);
   app.post('/user/register', controllers.user.create);
-  // app.post('/user/login', checkLogin, controllers.user.login);
+  app.post('/user/info', checkLogin, controllers.user.info);
   app.post('/user/login', controllers.user.login);
 };

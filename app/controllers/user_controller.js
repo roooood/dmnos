@@ -5,7 +5,14 @@ var settings = require('../../config/settings');
 var request = require('request');
 var md5 = require('md5');
 
-
+function userInfo(user) {
+  return {
+    name: user.fullName(),
+    username: user.username,
+    token: user.token,
+    balance: user.balance,
+  }
+}
 module.exports = {
   list: function (req, res, next) {
     req.models.user.find().limit(4).order('-id').all(function (err, messages) {
@@ -41,7 +48,7 @@ module.exports = {
             newUser.password = md5(newUser.password);
             newUser.token = token;
             newUser.save();
-            return res.send({ success: true, data: { token: token } });
+            return res.send({ success: true, data: userInfo(newUser) });
           }
         });
       });
@@ -63,12 +70,17 @@ module.exports = {
         if (body.success !== undefined && !body.success) {
           return res.json({ success: false, errors: { captcha: ["به نظر میرسد که شما ربات هستید"] } });
         } else {
-          return res.send({ success: true, data: { token: user[0].token } });
+          return res.send({ success: true, data: userInfo(user[0]) });
         }
       });
     });
   },
-  get: function (req, res, next) {
-
+  info: function (req, res, next) {
+    req.models.user.get(req.user.id, function (err, user) {
+      if (err != null) {
+        return res.json({ success: false });
+      }
+      return res.send({ success: true, data: userInfo(user) });
+    })
   }
 };

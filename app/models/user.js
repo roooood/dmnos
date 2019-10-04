@@ -8,10 +8,11 @@ module.exports = function (orm, db) {
     phone: { type: 'text', required: true, unique: true },
     username: { type: 'text', required: true, unique: true },
     password: { type: 'text', required: true },
+    token: String,
+    balance: Number,
     joinedAt: { type: 'date', required: true, time: true },
     lastSeen: { type: 'date', required: true, time: true },
-    status: Boolean,
-    token: String
+    status: Boolean
   },
     {
       hooks: {
@@ -19,6 +20,7 @@ module.exports = function (orm, db) {
           this.joinedAt = new Date();
           this.lastSeen = new Date();
           this.status = true;
+          this.balance = 0;
         }
 
       },
