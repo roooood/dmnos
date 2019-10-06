@@ -88,7 +88,7 @@ class Server extends colyseus.Room {
             }
             this.first = false;
         }, 500)
-        // this.checkJoinRules(client);
+        this.checkJoinRules(client);
         this.send(client, {
             welcome: {
                 table: this.meta,
