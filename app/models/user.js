@@ -68,7 +68,11 @@ module.exports = function (orm, db) {
             phone: this.phone,
             username: this.username,
             joinedAt: this.joinedAt,
+            win: this.win,
+            lose: this.lose,
+            totalGame: this.totalGame,
             lastSeen: this.lastSeen,
+            balance: this.balance,
             status: this.status,
           };
         }

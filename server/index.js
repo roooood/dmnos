@@ -78,7 +78,7 @@ class Server extends colyseus.Room {
     }
     onJoin(client, options, auth) {
         client.id = auth.id;
-        client.name = auth.fullName();
+        client.name = auth.name;
         client.balance = auth.balance;
         this.timer = this.clock.setTimeout(() => {
             if (this.first) {
@@ -131,6 +131,11 @@ class Server extends colyseus.Room {
 
     addPlayer(client, sit) {
         this.removePlayer(client);
+        console.log('====================================');
+        console.log(this.state.players);
+        console.log('-------------------------');
+        console.log(client.id, sit);
+        console.log('====================================');
         if (this.state.players[sit] == null) {
             client.sit = sit;
 
@@ -151,23 +156,39 @@ class Server extends colyseus.Room {
 
             return true;
         }
-        else if ('disconnected' in this.state.players[sit] && this.state.players[sit].id == client.id) {
-            client.sit = sit;
-            this.broadcast({
-                connected: client.name
-            });
-            this.send(client, { dices: this.deck[client.sit - 1] });
-            if (this.next == sit) {
-                this.checkHaveDice();
-            }
-            delete this.state.players[sit].disconnected;
-            return true;
-        }
         else {
+            for (let i in this.state.players) {
+                if (this.state.players[i].id == client.id && 'disconnected' in this.state.players[i]) {
+                    console.log('====================================');
+                    console.log('back');
+                    console.log('====================================');
+                    client.sit = this.state.players[i].sit;
+                    this.broadcast({
+                        connected: client.name
+                    });
+                    this.reconnected(client);
+                    delete this.state.players[this.state.players[i].sit].disconnected;
+                    break;
+                }
+            }
 
+
+            return true;
         }
         return false;
 
+    }
+    reconnected(client) {
+        this.timer = this.clock.setTimeout(() => {
+            console.log('====================================');
+            console.log(this.deck[client.sit - 1]);
+            console.log('====================================');
+            this.send(client, { dices: this.deck[client.sit - 1] });
+            if (this.state.turn == client.sit) {
+                this.send(client, { turn: client.sit });
+                this.checkHaveDice();
+            }
+        }, 200)
     }
     disconnected(client) {
         if (client.sit > 0)
@@ -191,9 +212,12 @@ class Server extends colyseus.Room {
     start() {
         this.started = true;
         this.state.started = true;
+        this.state.players["1"].point = 0;
+        this.state.players["2"].point = 0;
         this.setupNewGame();
     }
     setupNewGame(starter = null) {
+        this.req = null;
         let dices = [], i, sit, j, simi = [];
         for (i = 0; i < 7; i++) {
             for (let j = 0; j <= i; j++) {
@@ -289,6 +313,9 @@ class Server extends colyseus.Room {
         else {
             this.state.moveable[0] = dice.number[1];
         }
+        console.log('====================================');
+        console.log(this.state.userSimi[sit]);
+        console.log('====================================');
         if (this.state.userSimi[sit] == 0) {
             this.RoundDone();
         }
@@ -326,7 +353,6 @@ class Server extends colyseus.Room {
                 this.RoundDone();
             }
             else {
-                console.log(this.state.simi);
                 if (!(this.state.moveable.some(v => dice.includes(v)))) {
                     this.send(client, { pick: true });
                 }
@@ -342,13 +368,66 @@ class Server extends colyseus.Room {
             k = i == 1 ? '2' : '1';
             this.state.players[k].point = point[i];
         }
-        let starter = point[0] > point[1] ? 1 : 2;
-        this.clock.setTimeout(() => {
-            this.setupNewGame(starter);
-        }, 500);
+        let starter = point[0] > point[1] ? 2 : 1;
+        console.log('====================================');
+        console.log(point, starter);
+        console.log('====================================');
+        let go = true;
+        for (i in this.state.players) {
+            if (this.state.players[i].point >= this.meta.point) {
+                this.gameDone();
+                go = false;
+                break;
+            }
+        }
+        if (go) {
+            this.clock.setTimeout(() => {
+                this.setupNewGame(starter);
+            }, 1000);
+        }
 
     }
+    gameDone() {
+        let bet = this.meta.bet;
+        let point = {
+            bet, commission: this.setting.commission
+        }
+        let i;
+        this.models.points.create(point, (err, pnt) => {
+            for (i in this.state.players) {
+                let type = (this.state.players[i].point >= this.meta.point) ? 'win' : 'lose'
+                let result = {
+                    type, points_id: pnt.id, user_id: this.state.players[i].id
+                }
+
+                let balance = bet * this.setting.commission / 100;
+                this.models.user.get(this.state.players[i].id, (err, user) => {
+                    user.balance += type == 'win' ? balance : -bet;
+                    user.save(function (err) {
+                        console.log("saved!");
+                    });
+                });
+
+                this.models.results.create(result, (err, res) => {
+
+                });
+            }
+        });
+        this.clock.setTimeout(() => {
+            this.close();
+        }, 1000);
+    }
+    close() {
+        let i;
+        for (i in this.clients) {
+            this.clients[i].close();
+        }
+    }
+
     checkNoMoreDice() {
+        console.log('====================================');
+        console.log(this.state.simi);
+        console.log('====================================');
         let exist = false, i;
         for (i of this.state.simi) {
             if (i !== null) {

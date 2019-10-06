@@ -58,7 +58,7 @@ module.exports = {
     let params = _.pick(req.body, 'username', 'password');
     params.password = md5(params.password);
     req.models.user.find(params, 1, function (err, user) {
-      if (user == null) {
+      if (user[0] == null) {
         return res.json({ success: false, errors: { data: ["نام کاربری یا کلمه عبور اشتباه است"] } });
       }
       user[0].lastSeen = new Date();

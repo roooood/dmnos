@@ -17,7 +17,9 @@ module.exports = function (app) {
     else
       res.send({ success: false, message: "login need" })
   };
+
   app.get('/', controllers.home);
+  app.get('/info/tops', controllers.info.tops);
   app.post('/user/register', controllers.user.create);
   app.post('/user/info', checkLogin, controllers.user.info);
   app.post('/user/login', controllers.user.login);
